@@ -21,7 +21,6 @@ TERMINAL_CMD="alacritty"           # placeholder used in hypr configs if needed
 LAUNCHER_CMD="wofi --show drun"
 CATPPUCCIN_FLAVOR="mocha"
 ACCENT_COLOR="#1f6f4f"
-ENABLE_PIKA_REPO=true              # optional third-party repo (enabled by default for Hyprland)
 ENABLE_SYSTEMD_USER_SERVICE=true
 USER_TO_ADD_DOCKER_GROUP="$(whoami)"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -174,7 +173,37 @@ LANG_PACKAGES=(python3 python3-pip golang-go)
 RUST_PACKAGES=(build-essential pkg-config libssl-dev cmake)
 # Wayland/Hyprland-related packages (names vary across distros; some may be missing)
 WAYLAND_PACKAGES=(xwayland swaybg libwayland-dev libegl1-mesa)
-HYPR_PACKAGES=(hyprland waybar wofi mako swww grim slurp wl-clipboard wayland-protocols)
+HYPR_PACKAGES=(waybar wofi mako swww grim slurp wl-clipboard wayland-protocols)
+HYPRLAND_BUILD_DEPS=(
+    g++
+    build-essential
+    git
+    cmake
+    meson
+    libwayland-dev
+    libdrm-dev
+    libgbm-dev
+    libxkbcommon-dev
+    libpango1.0-dev
+    libcairo2-dev
+    libgdk-pixbuf2.0-dev
+    libglib2.0-dev
+    libgtk-3-dev
+    libseat-dev
+    libinput-dev
+    libdisplay-info-dev
+    libliftoff-dev
+    libxcb-dri3-dev
+    libxcb-present-dev
+    libxcb-render-util0-dev
+    libxcb-xinput-dev
+    xdg-desktop-portal-wlr
+    libgtkmm-3.0-dev
+    libjsoncpp-dev
+    libspdlog-dev
+    libfmt-dev
+    libjpeg-dev
+)
 AUDIO_PACKAGES=(pipewire pipewire-pulse wireplumber pavucontrol)
 DISPLAY_MANAGER_PACKAGES=(sddm)
 TERMINAL_PACKAGES=(alacritty)
@@ -192,24 +221,22 @@ if command -v batcat >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1; then
     sudo ln -s /usr/bin/batcat /usr/local/bin/bat
 fi
 
-# Try to add hyprland repo if requested
-if [ "$ENABLE_PIKA_REPO" = "true" ]; then
-  log "Adding PikaOS community repo (third-party) - use at your own risk"
-  sudo mkdir -p /etc/apt/keyrings
-  if wget -qO- "https://ppa.pika-os.com/key.gpg" | sudo gpg --dearmor -o /etc/apt/keyrings/pikaos-archive-keyring.gpg; then
-    echo "deb [signed-by=/etc/apt/keyrings/pikaos-archive-keyring.gpg] https://ppa.pika-os.com/ stable main" | sudo tee /etc/apt/sources.list.d/pikaos.list >/dev/null
-    apt_update_retry
-  else
-    warn "Failed to add Pika repo key; skipping."
-  fi
+# Create a symlink for fdfind -> fd if needed
+if command -v fdfind >/dev/null 2>&1 && ! command -v fd >/dev/null 2>&1; then
+    log "Creating symlink for fd -> fdfind"
+    sudo ln -s /usr/bin/fdfind /usr/local/bin/fd
 fi
 
-# Try installing Hyprland-related packages via apt; if they don't exist, we'll fallback later.
+# Install Hyprland build dependencies
+log "Installing Hyprland build dependencies..."
+apt_install_retry "${HYPRLAND_BUILD_DEPS[@]}" || die "Failed to install Hyprland build dependencies."
+
+# Try installing Hyprland-related packages via apt;
 log "Attempting to install Hyprland-related packages via apt..."
 if apt_install_retry "${HYPR_PACKAGES[@]}"; then
   log "Hyprland-related packages installed via apt (or some of them)."
 else
-  warn "Could not install all Hyprland packages from apt; will try fallback installer for Hyprland later."
+  warn "Could not install all Hyprland packages from apt; some components might be missing."
 fi
 
 # Audio and network
@@ -272,19 +299,24 @@ if ! command -v go >/dev/null 2>&1; then
 }
 
 # ---------------------------
-# 5) Hyprland fallback installer (if hyprland not found)
+# 5) Install Hyprland from source
 # ---------------------------
-CURRENT_SECTION="hypr_fallback"
+CURRENT_SECTION="hyprland_install"
 if ! command -v hyprland >/dev/null 2>&1 && ! command -v Hyprland >/dev/null 2>&1; then
-  warn "Hyprland binary not found. Attempting official Hyprland installer (fallback)."
-  # Try official install script (this script may build from source)
-  if curl -fsSL https://raw.githubusercontent.com/hyprwm/Hyprland/main/install.sh | bash -s -- --unattended; then
-    log "Hyprland installed via official installer."
-  else
-    warn "Hyprland official installer failed. You may need to install Hyprland manually or enable a distro/community repo."
-  fi
+    log "Hyprland not found. Building from source."
+    tmpd="$(mktemp -d)"
+    pushd "$tmpd" >/dev/null
+    git clone --recursive https://github.com/hyprwm/Hyprland
+    cd Hyprland
+    git submodule update --init --recursive
+    meson build
+    ninja -C build
+    sudo ninja -C build install
+    popd >/dev/null
+    rm -rf "$tmpd"
+    log "Hyprland installed successfully."
 else
-  log "Hyprland binary detected."
+    log "Hyprland already installed."
 fi
 
 # ---------------------------
