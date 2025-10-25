@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-set -e
-
 # ==================================================
 # 🌿 anvndev Hyprland Setup for Ubuntu 24.04 LTS
 # Full auto-setup for backend/devops environment
@@ -10,6 +8,75 @@ set -e
 # Setup logging
 LOGFILE="$HOME/hyprland_install.log"
 exec 1> >(tee -a "$LOGFILE") 2>&1
+
+# Error handling and cleanup function
+cleanup() {
+    if [ "$?" -ne 0 ]; then
+        echo "❌ Error occurred during installation. Check $LOGFILE for details."
+        echo "❌ Last error occurred in section: $CURRENT_SECTION"
+    fi
+}
+
+trap cleanup EXIT
+
+# Function to handle apt operations with retry mechanism
+apt_install() {
+    local packages=("$@")
+    local max_attempts=3
+    local attempt=1
+    local wait_time=10
+
+    while [ $attempt -le $max_attempts ]; do
+        echo "📦 Installing packages (Attempt $attempt/$max_attempts)..."
+        
+        # Wait for apt lock to be released
+        while sudo fuser /var/{lib/{dpkg,apt/lists},cache/apt/archives}/lock >/dev/null 2>&1; do
+            echo "⏳ Waiting for other software managers to finish..."
+            sleep 1
+        done
+
+        # Try to install packages
+        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}" >/dev/null 2>&1; then
+            echo "✅ Package installation successful!"
+            return 0
+        else
+            echo "⚠️ Package installation failed. Retrying in $wait_time seconds..."
+            sleep $wait_time
+            # Update package list before retry
+            sudo apt-get update >/dev/null 2>&1
+            wait_time=$((wait_time * 2))
+            attempt=$((attempt + 1))
+        fi
+    done
+
+    echo "❌ Failed to install packages after $max_attempts attempts."
+    return 1
+}
+
+# Function to verify package installation
+verify_packages() {
+    local packages=("$@")
+    local failed_packages=()
+
+    for pkg in "${packages[@]}"; do
+        if ! dpkg -l | grep -q "^ii  $pkg"; then
+            failed_packages+=("$pkg")
+        fi
+    done
+
+    if [ ${#failed_packages[@]} -ne 0 ]; then
+        echo "❌ Following packages failed to install:"
+        printf '%s\n' "${failed_packages[@]}"
+        return 1
+    fi
+    return 0
+}
+
+# Store currently executing section for error reporting
+CURRENT_SECTION=""
+
+# Exit on error, but ensure cleanup runs
+set -e
 
 # Progress tracking
 STEPS_TOTAL=11
@@ -58,17 +125,58 @@ echo "🌿 Starting anvndev environment setup..."
 # --------------------------------------------------
 # 1. System update
 # --------------------------------------------------
-sudo apt update -y
+CURRENT_SECTION="System Update"
+echo "🔄 Updating system packages..."
+
+# Wait for apt lock to be released
+while sudo fuser /var/{lib/{dpkg,apt/lists},cache/apt/archives}/lock >/dev/null 2>&1; do
+    echo "⏳ Waiting for other software managers to finish..."
+    sleep 1
+done
+
+# Update package lists
+for i in {1..3}; do
+    if sudo apt-get update >/dev/null 2>&1; then
+        break
+    else
+        echo "⚠️ Update failed, retrying... (Attempt $i/3)"
+        sleep 5
+    fi
+done
+
+# Upgrade packages with error handling
+if ! sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y >/dev/null 2>&1; then
+    echo "⚠️ Full upgrade failed, attempting minimal upgrade..."
+    sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade --without-new-pkgs -y
+fi
 
 # --------------------------------------------------
 # 2. Install core packages and display manager
 # --------------------------------------------------
+CURRENT_SECTION="Core Package Installation"
 echo "📦 Installing core packages..."
-sudo apt install -y git curl wget zsh tmux neovim ripgrep fd-find unzip fzf build-essential \
-  python3 python3-pip golang-go rustc cargo nodejs npm \
-  sddm wayland xorg-xwayland mesa-utils \
-  pipewire pipewire-pulse wireplumber pavucontrol \
-  network-manager networkmanager-openvpn plasma-nm
+
+# Define package groups
+CORE_PKGS=(git curl wget zsh tmux neovim ripgrep fd-find unzip fzf build-essential)
+LANG_PKGS=(python3 python3-pip golang-go rustc cargo nodejs npm)
+DISPLAY_PKGS=(sddm wayland xorg-xwayland mesa-utils)
+AUDIO_PKGS=(pipewire pipewire-pulse wireplumber pavucontrol)
+NETWORK_PKGS=(network-manager networkmanager-openvpn plasma-nm)
+
+# Install packages by group with verification
+for group in "CORE_PKGS" "LANG_PKGS" "DISPLAY_PKGS" "AUDIO_PKGS" "NETWORK_PKGS"; do
+    echo "📦 Installing ${group}..."
+    if ! apt_install "${!group[@]}"; then
+        echo "❌ Failed to install ${group}. Cannot continue."
+        exit 1
+    fi
+    
+    # Verify installation
+    if ! verify_packages "${!group[@]}"; then
+        echo "❌ Package verification failed for ${group}. Cannot continue."
+        exit 1
+    fi
+done
 
 # Setup GPU drivers
 echo "🎮 Setting up GPU drivers..."
@@ -184,13 +292,54 @@ curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | 
 # --------------------------------------------------
 # 6. Hyprland installation (Wayland compositor)
 # --------------------------------------------------
+CURRENT_SECTION="Hyprland Installation"
 echo "🌈 Installing Hyprland and dependencies..."
-sudo add-apt-repository -y ppa:hyprland-dev/stable || true
-sudo apt update
-sudo apt install -y hyprland waybar rofi kitty \
-    wofi mako grim slurp wl-clipboard \
-    network-manager-gnome blueman \
-    brightnessctl pamixer swaylock
+
+# Add Hyprland repository with retry
+max_attempts=3
+attempt=1
+while [ $attempt -le $max_attempts ]; do
+    if sudo add-apt-repository -y ppa:hyprland-dev/stable >/dev/null 2>&1; then
+        break
+    else
+        echo "⚠️ Failed to add Hyprland repository (Attempt $attempt/$max_attempts)"
+        if [ $attempt -eq $max_attempts ]; then
+            echo "❌ Could not add Hyprland repository. Cannot continue."
+            exit 1
+        fi
+        sleep 5
+        attempt=$((attempt + 1))
+    fi
+done
+
+# Update package lists after adding repository
+sudo apt-get update >/dev/null 2>&1
+
+# Define Hyprland package groups
+HYPR_CORE=(hyprland waybar rofi kitty)
+HYPR_UTILS=(wofi mako grim slurp wl-clipboard)
+HYPR_SYSTEM=(network-manager-gnome blueman brightnessctl pamixer swaylock)
+
+# Install Hyprland packages by group
+for group in "HYPR_CORE" "HYPR_UTILS" "HYPR_SYSTEM"; do
+    echo "📦 Installing ${group}..."
+    if ! apt_install "${!group[@]}"; then
+        echo "❌ Failed to install ${group}. Cannot continue."
+        exit 1
+    fi
+    
+    # Verify installation
+    if ! verify_packages "${!group[@]}"; then
+        echo "❌ Package verification failed for ${group}. Cannot continue."
+        exit 1
+    fi
+done
+
+# Verify Hyprland installation specifically
+if ! command -v Hyprland >/dev/null 2>&1; then
+    echo "❌ Hyprland installation verification failed. Cannot continue."
+    exit 1
+fi
 
 # --------------------------------------------------
 # 7. Setup Audio and Network
