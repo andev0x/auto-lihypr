@@ -11,16 +11,17 @@
 # -----------------------------------------------------------------------------
 
 set -euo pipefail
-IFS=$'\n\t'
+IFS=
+\n\t'
 
 # ---------------------------
 # Editable defaults
 # ---------------------------
-TERMINAL_CMD="ghostty"             # placeholder used in hypr configs if needed
-LAUNCHER_CMD="wofi --show run"
+TERMINAL_CMD="alacritty"           # placeholder used in hypr configs if needed
+LAUNCHER_CMD="wofi --show drun"
 CATPPUCCIN_FLAVOR="mocha"
 ACCENT_COLOR="#1f6f4f"
-ENABLE_PIKA_REPO=false             # optional third-party repo (false by default)
+ENABLE_PIKA_REPO=true              # optional third-party repo (enabled by default for Hyprland)
 ENABLE_SYSTEMD_USER_SERVICE=true
 USER_TO_ADD_DOCKER_GROUP="$(whoami)"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -60,7 +61,8 @@ die() { printf "\033[1;31m[ERROR]\033[0m %s\n" "$*"; exit 1; }
 
 apt_wait_for_locks() {
   # Wait for apt/dpkg locks to be released
-  while sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+  while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+        sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
         sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
         sudo fuser /var/cache/apt/archives/lock >/dev/null 2>&1; do
     echo "⏳ Waiting for other package managers to finish..."
@@ -137,11 +139,11 @@ user_systemctl_available() {
 # ---------------------------
 if [ "$EUID" -eq 0 ]; then
   die "Do not run this script as root. Run as normal user with sudo privileges."
-fi
+}
 
 if ! grep -q "Ubuntu" /etc/os-release 2>/dev/null; then
   die "This installer is designed for Ubuntu. Aborting."
-fi
+}
 
 log "Checking system resources..."
 MIN_CORES=2
@@ -167,7 +169,7 @@ CURRENT_SECTION="install_core_packages"
 log "Installing core packages (best-effort)..."
 
 # Core packages we attempt to install
-CORE_PACKAGES=(git curl wget unzip jq fzf ripgrep fd-find bat exa)
+CORE_PACKAGES=(git curl wget unzip jq fzf ripgrep fd-find bat eza)
 LANG_PACKAGES=(python3 python3-pip golang-go)
 RUST_PACKAGES=(build-essential pkg-config libssl-dev cmake)
 # Wayland/Hyprland-related packages (names vary across distros; some may be missing)
@@ -175,19 +177,27 @@ WAYLAND_PACKAGES=(xwayland swaybg libwayland-dev libegl1-mesa)
 HYPR_PACKAGES=(hyprland waybar wofi mako swww grim slurp wl-clipboard wayland-protocols)
 AUDIO_PACKAGES=(pipewire pipewire-pulse wireplumber pavucontrol)
 DISPLAY_MANAGER_PACKAGES=(sddm)
+TERMINAL_PACKAGES=(alacritty)
 
 # Try to install groups, but don't abort entire script if some not found — apt_install_retry will fail if apt can't install package names explicitly.
 # We'll attempt smaller sets to reduce big failures.
 apt_install_retry "${CORE_PACKAGES[@]}" || warn "Some core packages failed to install; continuing."
 apt_install_retry "${LANG_PACKAGES[@]}" || warn "Some language packages failed to install; continuing."
 apt_install_retry "${RUST_PACKAGES[@]}" || warn "Rust build tools partial install may have failed; continuing."
+apt_install_retry "${TERMINAL_PACKAGES[@]}" || warn "Terminal package install may have failed; continuing."
+
+# Create a symlink for bat -> batcat if needed
+if command -v batcat >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1; then
+    log "Creating symlink for bat -> batcat"
+    sudo ln -s /usr/bin/batcat /usr/local/bin/bat
+fi
 
 # Try to add hyprland repo if requested
 if [ "$ENABLE_PIKA_REPO" = "true" ]; then
   log "Adding PikaOS community repo (third-party) - use at your own risk"
-  sudo mkdir -p /usr/share/keyrings
-  if wget -qO- "https://ppa.pika-os.com/key.gpg" | sudo gpg --dearmor -o /usr/share/keyrings/pikaos-archive-keyring.gpg; then
-    echo "deb [signed-by=/usr/share/keyrings/pikaos-archive-keyring.gpg] https://ppa.pika-os.com/ stable main" | sudo tee /etc/apt/sources.list.d/pikaos.list >/dev/null
+  sudo mkdir -p /etc/apt/keyrings
+  if wget -qO- "https://ppa.pika-os.com/key.gpg" | sudo gpg --dearmor -o /etc/apt/keyrings/pikaos-archive-keyring.gpg; then
+    echo "deb [signed-by=/etc/apt/keyrings/pikaos-archive-keyring.gpg] https://ppa.pika-os.com/ stable main" | sudo tee /etc/apt/sources.list.d/pikaos.list >/dev/null
     apt_update_retry
   else
     warn "Failed to add Pika repo key; skipping."
@@ -195,7 +205,7 @@ if [ "$ENABLE_PIKA_REPO" = "true" ]; then
 fi
 
 # Try installing Hyprland-related packages via apt; if they don't exist, we'll fallback later.
-log "Attempting to install Hyprland-related packages via apt (they may not be available on Ubuntu default repos)..."
+log "Attempting to install Hyprland-related packages via apt..."
 if apt_install_retry "${HYPR_PACKAGES[@]}"; then
   log "Hyprland-related packages installed via apt (or some of them)."
 else
@@ -259,7 +269,7 @@ if ! command -v go >/dev/null 2>&1; then
   else
     warn "golang not available in apt; please install manually if needed"
   fi
-fi
+}
 
 # ---------------------------
 # 5) Hyprland fallback installer (if hyprland not found)
@@ -283,8 +293,8 @@ fi
 CURRENT_SECTION="gpu"
 log "Checking GPU vendor for driver hints..."
 if lspci | grep -qi nvidia; then
-  warn "NVIDIA GPU detected. Installing nvidia-driver-535 (may vary)."
-  apt_install_retry nvidia-driver-535 nvidia-utils-535 || warn "NVIDIA driver installation failed or package not present."
+  warn "NVIDIA GPU detected. Using ubuntu-drivers to install recommended drivers."
+  sudo ubuntu-drivers autoinstall || warn "NVIDIA driver installation failed."
   sudo bash -c 'echo "options nvidia-drm modeset=1" > /etc/modprobe.d/nvidia.conf' || warn "Could not write nvidia.conf"
 elif lspci | grep -qi amd; then
   apt_install_retry mesa-vulkan-drivers || warn "mesa vulkan drivers install failed."
@@ -296,9 +306,8 @@ fi
 # 7) Display manager session entry for Hyprland (if SDDM exists)
 # ---------------------------
 CURRENT_SECTION="sddm_session"
-if [ -d /usr/share/xsessions ] && [ -w /usr/share/wayland-sessions ] 2>/dev/null; then
+if [ -d /usr/share/wayland-sessions ]; then
   log "Creating Hyprland .desktop session"
-  sudo mkdir -p /usr/share/wayland-sessions
   sudo tee /usr/share/wayland-sessions/hyprland.desktop >/dev/null <<'EOS'
 [Desktop Entry]
 Name=Hyprland
@@ -317,7 +326,7 @@ log "Backing up existing ~/.config to $BACKUP_DIR (selected dirs) and copying ne
 mkdir -p "$BACKUP_DIR"
 mkdir -p "$HOME/.config"
 
-for d in nvim tmux hypr waybar wofi mako swww starship.toml zsh; do
+for d in nvim tmux hypr waybar wofi mako swww starship.toml zsh alacritty kitty ghostty; do
   if [ -e "$HOME/.config/$d" ] || [ -e "$HOME/.$d" ]; then
     log "Backing up $d"
     mkdir -p "$BACKUP_DIR"
@@ -342,12 +351,17 @@ fi
 if [ -f "$REPO_ROOT/configs/starship.toml" ]; then
   mkdir -p "$HOME/.config"
   cp -v "$REPO_ROOT/configs/starship.toml" "$HOME/.config/starship.toml" || warn "Failed to copy starship.toml"
-fi
+}
 
 # Copy wallpapers if present
 if [ -d "$REPO_ROOT/wallpapers" ]; then
   mkdir -p "$HOME/.config/hypr/wallpapers"
   cp -rv "$REPO_ROOT/wallpapers/"* "$HOME/.config/hypr/wallpapers/" || true
+fi
+
+# Make set_wallpaper.sh executable
+if [ -f "$HOME/.config/swww/set_wallpaper.sh" ]; then
+    chmod +x "$HOME/.config/swww/set_wallpaper.sh"
 fi
 
 # ---------------------------
@@ -369,10 +383,10 @@ log "Setting zsh as default shell if not already"
 
 if [ -x "$(command -v zsh)" ]; then
   if [ "$SHELL" != "$(command -v zsh)" ]; then
-    if chsh -s "$(command -v zsh)" >/dev/null 2>&1; then
+    if chsh -s "$(command -v zsh)"; then
       log "Default shell changed to zsh (you may need to log out/in to apply)."
     else
-      warn "chsh failed; you may change default shell manually."
+      warn "chsh failed; you may need to enter your password or change default shell manually."
     fi
   fi
 else
@@ -395,11 +409,15 @@ fi
 # 11) Add user to docker group
 # ---------------------------
 CURRENT_SECTION="docker_group"
-if id -nG "$USER_TO_ADD_DOCKER_GROUP" | grep -qw docker; then
-  log "User $USER_TO_ADD_DOCKER_GROUP already in docker group"
+if command -v docker >/dev/null 2>&1; then
+    if id -nG "$USER_TO_ADD_DOCKER_GROUP" | grep -qw docker; then
+      log "User $USER_TO_ADD_DOCKER_GROUP already in docker group"
+    else
+      log "Adding $USER_TO_ADD_DOCKER_GROUP to docker group (requires logout/login to take effect)"
+      sudo usermod -aG docker "$USER_TO_ADD_DOCKER_GROUP" || warn "Failed to add user to docker group"
+    fi
 else
-  log "Adding $USER_TO_ADD_DOCKER_GROUP to docker group (requires logout/login to take effect)"
-  sudo usermod -aG docker "$USER_TO_ADD_DOCKER_GROUP" || warn "Failed to add user to docker group"
+    warn "Docker is not installed. Skipping adding user to docker group."
 fi
 
 # ---------------------------
@@ -416,7 +434,7 @@ Description=Hyprland Wallpaper Rotation Service
 PartOf=graphical-session.target
 
 [Service]
-ExecStart=%h/.config/hypr/set_wallpaper.sh --random
+ExecStart=%h/.config/swww/set_wallpaper.sh
 Restart=always
 RestartSec=3600
 
@@ -435,7 +453,7 @@ fi
 # ---------------------------
 CURRENT_SECTION="final_verify"
 log "Verifying critical binaries"
-CRITICAL=(hyprland waybar wofi swww mako grim slurp wl-paste wl-copy zsh nvim tmux)
+CRITICAL=(hyprland waybar wofi swww mako grim slurp wl-paste wl-copy zsh nvim tmux alacritty)
 for bin in "${CRITICAL[@]}"; do
   if command -v "$bin" >/dev/null 2>&1; then
     log "Found: $bin"
