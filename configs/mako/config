@@ -1,0 +1,9 @@
+[default]
+background-color=#111a11
+text-color=#a6e3a1
+border-radius=8
+border-size=2
+border-color=#2e7d32
+default-timeout=5000
+font=JetBrainsMono Nerd Font 11
+

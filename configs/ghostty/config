@@ -1,0 +1,82 @@
+# =============================================================================
+# Ghostty Terminal Configuration — Green Dark Forest Theme
+# Author: anvndev
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Font
+# -----------------------------------------------------------------------------
+font-family            = "JetBrainsMono Nerd Font Mono"
+font-size              = 16
+font-style             = Medium
+adjust-cell-height     = 30%
+font-feature           = -liga
+font-thicken           = false
+
+# -----------------------------------------------------------------------------
+# Colors (Green Forest Dark)
+# -----------------------------------------------------------------------------
+#theme                  = "gruvboxdark"
+background             = "010D00"
+foreground             = "#B2D98B"
+cursor-style           = block
+cursor-opacity         = 0.75
+cursor-color           = "#80FF80"
+bold-is-bright         = true
+minimum-contrast       = 1.5
+
+# -----------------------------------------------------------------------------
+# Visuals
+# -----------------------------------------------------------------------------
+background-opacity     = 0.8
+background-blur-radius = 10
+window-colorspace      = srgb
+macos-titlebar-style   = hidden
+
+# -----------------------------------------------------------------------------
+# Window
+# -----------------------------------------------------------------------------
+window-width           = 190
+window-height          = 48
+window-padding-balance = true
+window-save-state      = always
+resize-overlay         = never
+confirm-close-surface  = true
+macos-non-native-fullscreen = false
+window-decoration      = true
+
+# -----------------------------------------------------------------------------
+# Integration & Clipboard
+# -----------------------------------------------------------------------------
+mouse-scroll-multiplier     = 2
+shell-integration-features  = no-cursor,sudo
+copy-on-select              = clipboard
+clipboard-trim-trailing-spaces = true
+quit-after-last-window-closed = true
+macos-option-as-alt = true
+
+# -----------------------------------------------------------------------------
+# Keybindings
+# -----------------------------------------------------------------------------
+keybind = clear
+keybind = cmd+t=new_tab
+keybind = cmd+w=close_surface
+keybind = cmd+n=new_window
+keybind = cmd+shift+right=next_tab
+keybind = cmd+shift+left=previous_tab
+keybind = cmd+1=goto_tab:1
+keybind = cmd+2=goto_tab:2
+keybind = cmd+3=goto_tab:3
+keybind = cmd+shift+v=new_split:right
+keybind = cmd+shift+s=new_split:down
+keybind = cmd+shift+z=toggle_split_zoom
+keybind = cmd+shift+j=goto_split:bottom
+keybind = cmd+shift+k=goto_split:top
+keybind = cmd+shift+l=goto_split:right
+keybind = cmd+shift+h=goto_split:left
+keybind = cmd+plus=increase_font_size:1
+keybind = cmd+minus=decrease_font_size:1
+keybind = cmd+0=reset_font_size
+keybind = cmd+c=copy_to_clipboard
+keybind = cmd+v=paste_from_clipboard
+keybind = cmd+r=reload_config

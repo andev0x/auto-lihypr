@@ -1,0 +1,23 @@
+@import "https://catppuccin.github.io/waybar/catppuccin-mocha.css";
+
+* {
+    font-family: "JetBrainsMono Nerd Font", monospace;
+    font-size: 12px;
+    border-radius: 10px;
+}
+
+window#waybar {
+    background: rgba(10, 20, 10, 0.5);
+    /* dark green accent */
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(40, 80, 40, 0.3);
+    color: #d0d0d0;
+}
+
+#workspaces button.active {
+    background: rgba(50, 100, 50, 0.7);
+}
+
+#clock {
+    color: #a6e3a1;
+}

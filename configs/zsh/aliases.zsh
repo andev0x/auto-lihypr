@@ -1,0 +1,11 @@
+
+alias ls="eza --icons --group-directories-first"
+alias cat="bat"
+alias cd="z"
+alias gs="git status"
+alias gc="git commit"
+alias gp="git push"
+alias gl="git pull"
+alias py="python3"
+alias gof="go fmt ./..."
+alias gor="go run ."

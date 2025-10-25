@@ -1,0 +1,33 @@
+{
+    "layer": "top",
+    "position": "top",
+    "modules-left": [
+        "hyprland/workspaces",
+        "custom/logo"
+    ],
+    "modules-center": [
+        "clock"
+    ],
+    "modules-right": [
+        "cpu",
+        "memory",
+        "network",
+        "backlight",
+        "pulseaudio",
+        "battery",
+        "tray",
+        "custom/power"
+    ],
+    "custom/logo": {
+        "format": " anvndev",
+        "tooltip": false
+    },
+    "custom/power": {
+        "format": "⏻",
+        "on-click": "wlogout"
+    },
+    "clock": {
+        "format": "{:%a %d %b  %H:%M}",
+        "interval": 60
+    }
+}

@@ -1,0 +1,59 @@
+
+# ==================================================
+# 💫 Starship Prompt Configuration
+# Theme: Dark Green / Minimal / Fast
+# ==================================================
+
+format = """
+[](bold green)\
+$directory\
+[](bold green)\
+$git_branch$git_status\
+$nodejs$python$golang$rust\
+[](bold green)\
+$time
+"""
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[✗](bold red)"
+vicmd_symbol = "[❮](bold blue)"
+
+[directory]
+style = "bold fg:green"
+format = "[   $path ]($style)"
+
+[git_branch]
+symbol = " "
+style = "bold fg:dark_green"
+format = "[ $symbol$branch ]($style)"
+
+[git_status]
+style = "fg:yellow"
+format = "([$all_status$ahead_behind]($style))"
+
+[golang]
+symbol = " "
+style = "bold fg:cyan"
+format = "[ $symbol($version) ]($style)"
+
+[rust]
+symbol = " "
+style = "bold fg:orange"
+format = "[ $symbol($version) ]($style)"
+
+[python]
+symbol = " "
+style = "bold fg:blue"
+format = "[ $symbol($version) ]($style)"
+
+[nodejs]
+symbol = " "
+style = "bold fg:green"
+format = "[ $symbol($version) ]($style)"
+
+[time]
+disabled = false
+time_format = "%H:%M"
+style = "bold fg:dark_green"
+format = "[ 🕒 $time ]($style)"
