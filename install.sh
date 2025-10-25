@@ -58,7 +58,7 @@ echo "🌿 Starting anvndev environment setup..."
 # --------------------------------------------------
 # 1. System update
 # --------------------------------------------------
-sudo apt update -y && sudo apt upgrade -y
+sudo apt update -y
 
 # --------------------------------------------------
 # 2. Install core packages and display manager
@@ -68,7 +68,7 @@ sudo apt install -y git curl wget zsh tmux neovim ripgrep fd-find unzip fzf buil
   python3 python3-pip golang-go rustc cargo nodejs npm \
   sddm wayland xorg-xwayland mesa-utils \
   pipewire pipewire-pulse wireplumber pavucontrol \
-  network-manager networkmanager-openvpn plasma-nm 
+  network-manager networkmanager-openvpn plasma-nm
 
 # Setup GPU drivers
 echo "🎮 Setting up GPU drivers..."
@@ -130,7 +130,7 @@ cp -r ./wallpapers/* "$HOME/.config/hypr/wallpapers/" 2>/dev/null || true
 if [ -f "./configs/swww/set_wallpaper.sh" ]; then
     cp ./configs/swww/set_wallpaper.sh "$HOME/.config/hypr/"
     chmod +x "$HOME/.config/hypr/set_wallpaper.sh"
-    
+
     # Create wallpaper rotation service
     mkdir -p "$HOME/.config/systemd/user"
     cat > "$HOME/.config/systemd/user/hyprland-wallpaper.service" << EOL
