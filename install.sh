@@ -9,7 +9,6 @@ set -euo pipefail
 
 REPO_DIR="$(pwd)"
 LOG_FILE="$HOME/auto-lihypr_install.log"
-
 CONFIG_DIR="$HOME/.config"
 ZSHRC="$HOME/.zshrc"
 FONT_DIR="$HOME/.local/share/fonts"
@@ -29,123 +28,121 @@ err() { echo -e "${RED}$1${RESET}" >&2; }
 # ==================================================
 log "🚀 Starting auto-lihypr installation..."
 
-# Helper: wait while apt/dpkg locks are held
 apt_wait_for_locks() {
-    local wait_seconds=0
     while sudo fuser /var/{lib/{dpkg,apt/lists},cache/apt/archives}/lock >/dev/null 2>&1; do
-        if [ $wait_seconds -ge 300 ]; then
-            err "Timed out waiting for apt/dpkg locks (>$wait_seconds s)."
-            return 1
-        fi
-        log "⏳ Waiting for other package managers to finish... ($wait_seconds s)"
-        sleep 2
-        wait_seconds=$((wait_seconds + 2))
+        log "⏳ Waiting for other apt/dpkg processes..."
+        sleep 3
     done
-    return 0
 }
 
-# Helper: attempt to recover interrupted dpkg state
 apt_recover() {
-    # If dpkg was interrupted, try to fix it
-    if sudo dpkg --audit >/dev/null 2>&1; then
-        # no broken packages found
-        return 0
-    fi
-
-    log "⚠️ Detected dpkg inconsistency — attempting automatic recovery..."
-    sudo apt-get -o DPkg::Options::=--force-confdef -o DPkg::Options::=--force-confold update -y || true
+    log "🩹 Running dpkg recovery (if needed)..."
     sudo dpkg --configure -a || true
     sudo apt-get install -f -y || true
-
-    # Wait for locks to clear after recovery
-    apt_wait_for_locks || return 1
-
-    # One more update to ensure package lists are consistent
-    sudo apt-get update || true
-    return 0
 }
 
-# Ensure any interrupted dpkg state is healed before proceeding
-apt_wait_for_locks || exit 1
-apt_recover || { err "Failed to auto-recover dpkg state. Please run: sudo dpkg --configure -a && sudo apt-get install -f -y"; exit 1; }
+# --------------------------------------------------
+# 0. System Update
+# --------------------------------------------------
+apt_wait_for_locks
+sudo apt-get update -y
+sudo apt-get upgrade -y || true
 
-# Perform update/upgrade (non-interactive)
-log "🔄 Updating package lists and upgrading installed packages..."
-sudo DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null 2>&1 || true
-if ! sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y >/dev/null 2>&1; then
-    log "⚠️ Full upgrade failed — attempting safe upgrade without new packages"
-    sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade --without-new-pkgs -y || true
+# ==================================================
+# 🧠 DETECT SERVER OR DESKTOP MODE
+# ==================================================
+if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    IS_SERVER=true
+    log "💻 Detected headless Ubuntu Server environment (no GUI)."
+else
+    IS_SERVER=false
+    log "🖥️ Detected desktop environment with GUI support."
 fi
 
-# --------------------------------------------------
-# 1. Install essential packages
-# --------------------------------------------------
-log "🔧 Installing core packages..."
+# ==================================================
+# 🪄 ADD HYPRLAND REPOSITORY (IF NEEDED)
+# ==================================================
+if ! grep -q "hyprland/ppa" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
+    log "🌿 Adding Hyprland PPA..."
+    sudo apt-get install -y software-properties-common
+    sudo add-apt-repository ppa:hyprland/ppa -y
+    sudo apt-get update -y
+fi
 
-# Try to recover dpkg just before installing packages
-apt_wait_for_locks || exit 1
-apt_recover || { err "Failed to auto-recover dpkg state prior to install. Please run: sudo dpkg --configure -a && sudo apt-get install -f -y"; exit 1; }
-
+# ==================================================
+# 🔧 CORE PACKAGES
+# ==================================================
 CORE_PKGS=(
     git curl wget unzip jq fzf ripgrep
     zsh zoxide neovim python3-pip
     golang rustc cargo
-    waybar wofi mako hyprland swww
     fonts-jetbrains-mono
     build-essential meson cmake pkg-config
 )
 
-# Install packages with retries
+# Include GUI stack only if not headless
+if [ "$IS_SERVER" = false ]; then
+    CORE_PKGS+=(waybar wofi mako hyprland swww)
+else
+    log "⚙️ Skipping GUI packages (headless mode)."
+fi
+
+# ==================================================
+# 🧰 INSTALL CORE PACKAGES
+# ==================================================
+log "📦 Installing core packages..."
 attempts=0
 max_attempts=3
-until [ $attempts -ge $max_attempts ]
-do
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${CORE_PKGS[@]}" && break
-    attempts=$((attempts+1))
-    log "⚠️ apt-get install failed — retrying ($attempts/$max_attempts) after recovery..."
-    apt_recover || true
+
+until [ $attempts -ge $max_attempts ]; do
+    if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${CORE_PKGS[@]}"; then
+        ok "✅ Core packages installed successfully."
+        break
+    fi
+    attempts=$((attempts + 1))
+    err "⚠️ apt-get install failed — retrying ($attempts/$max_attempts)..."
+    apt_recover
     sleep $((attempts * 5))
 done
 
 if [ $attempts -ge $max_attempts ]; then
-    err "❌ Failed to install core packages after $max_attempts attempts. Please check $LOG_FILE and run: sudo dpkg --configure -a && sudo apt-get install -f -y"
+    err "❌ Failed to install core packages after $max_attempts attempts. Check $LOG_FILE."
     exit 1
 fi
 
-# --------------------------------------------------
-# 2. Install Starship
-# --------------------------------------------------
+# ==================================================
+# 💫 INSTALL STARSHIP PROMPT
+# ==================================================
 if ! command -v starship &>/dev/null; then
     log "✨ Installing Starship prompt..."
     curl -fsSL https://starship.rs/install.sh | bash -s -- -y
 fi
 
-# --------------------------------------------------
-# 3. Install GNU Stow
-# --------------------------------------------------
+# ==================================================
+# 📦 INSTALL GNU STOW
+# ==================================================
 if ! command -v stow &>/dev/null; then
     log "📦 Installing GNU Stow..."
     sudo apt install -y stow
 fi
 
-# --------------------------------------------------
-# 4. Configure Zsh + Starship + Zoxide
-# --------------------------------------------------
-log "🧠 Configuring Zsh shell..."
-if [ "$SHELL" != "$(which zsh)" ]; then
-    chsh -s "$(which zsh)"
-fi
-
+# ==================================================
+# 🧠 CONFIGURE ZSH + STARSHIP + ZOXIDE
+# ==================================================
+log "⚙️ Configuring Zsh..."
 touch "$ZSHRC"
 grep -qxF 'eval "$(starship init zsh)"' "$ZSHRC" || echo 'eval "$(starship init zsh)"' >> "$ZSHRC"
 grep -qxF 'eval "$(zoxide init zsh)"' "$ZSHRC" || echo 'eval "$(zoxide init zsh)"' >> "$ZSHRC"
 grep -qxF 'source ~/.config/zsh/aliases.zsh' "$ZSHRC" || echo 'source ~/.config/zsh/aliases.zsh' >> "$ZSHRC"
 
-# ==================================================
-# 🧱 APPLY CONFIGS USING STOW
-# ==================================================
-log "🧩 Applying configuration files with stow..."
+if [ "$SHELL" != "$(which zsh)" ]; then
+    chsh -s "$(which zsh)"
+fi
 
+# ==================================================
+# 🧱 APPLY CONFIGS
+# ==================================================
+log "🧩 Linking configs using GNU Stow..."
 mkdir -p "$CONFIG_DIR"
 cd "$REPO_DIR/configs"
 
@@ -159,16 +156,18 @@ done
 # ==================================================
 # 🖼️ WALLPAPER SETUP
 # ==================================================
-log "🖼️ Setting default wallpaper..."
-mkdir -p "$HOME/Pictures/wallpapers"
-cp -r "$WALLPAPER_DIR"/* "$HOME/Pictures/wallpapers/"
-if command -v swww &>/dev/null; then
-    swww init &>/dev/null || true
-    swww img "$HOME/Pictures/wallpapers/default.jpg" --transition-type any --transition-fps 60 --transition-duration 2 || true
+if [ "$IS_SERVER" = false ]; then
+    log "🖼️ Setting wallpaper..."
+    mkdir -p "$HOME/Pictures/wallpapers"
+    cp -r "$WALLPAPER_DIR"/* "$HOME/Pictures/wallpapers/"
+    if command -v swww &>/dev/null; then
+        swww init &>/dev/null || true
+        swww img "$HOME/Pictures/wallpapers/default.jpg" --transition-type any --transition-fps 60 --transition-duration 2 || true
+    fi
 fi
 
 # ==================================================
-# 🎨 FONT CACHE
+# 🔤 FONT CACHE
 # ==================================================
 log "🔤 Updating font cache..."
 fc-cache -fv >/dev/null 2>&1 || true
@@ -177,7 +176,5 @@ fc-cache -fv >/dev/null 2>&1 || true
 # ✅ DONE
 # ==================================================
 ok "✅ Installation complete!"
-ok "💻 Log out and choose Hyprland session to start."
-ok "🧩 Configs installed under ~/.config"
+ok "💻 Log out and choose Hyprland session to start (if GUI installed)."
 ok "📜 Log file: $LOG_FILE"
-
