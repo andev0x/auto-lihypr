@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 # ==================================================
-# 🌿 auto-lihypr — Full Hyprland Environment Setup
-# For Ubuntu Server 24.04 LTS
+# 🌿 auto-lihypr-minimal — Build Hyprland on Ubuntu Server 24.04
 # Author: anvndev
 # ==================================================
 
 set -euo pipefail
 
-REPO_DIR="$(pwd)"
 LOG_FILE="$HOME/auto-lihypr_install.log"
+REPO_DIR="$(pwd)"
 CONFIG_DIR="$HOME/.config"
-ZSHRC="$HOME/.zshrc"
 FONT_DIR="$HOME/.local/share/fonts"
 WALLPAPER_DIR="$REPO_DIR/wallpapers"
+BUILD_DIR="/tmp/hyprland-build"
 
 GREEN="\033[0;32m"
 YELLOW="\033[1;33m"
@@ -20,161 +19,106 @@ RED="\033[0;31m"
 RESET="\033[0m"
 
 log() { echo -e "${YELLOW}$1${RESET}"; }
-ok() { echo -e "${GREEN}$1${RESET}"; }
+ok()  { echo -e "${GREEN}$1${RESET}"; }
 err() { echo -e "${RED}$1${RESET}" >&2; }
 
 # ==================================================
-# 🧩 PREPARE SYSTEM
+# 🧩 BASIC SYSTEM SETUP
 # ==================================================
-log "🚀 Starting auto-lihypr installation..."
+log "🚀 Starting auto-lihypr-minimal installation..."
 
-apt_wait_for_locks() {
-    while sudo fuser /var/{lib/{dpkg,apt/lists},cache/apt/archives}/lock >/dev/null 2>&1; do
-        log "⏳ Waiting for other apt/dpkg processes..."
-        sleep 3
-    done
-}
-
-apt_recover() {
-    log "🩹 Running dpkg recovery (if needed)..."
-    sudo dpkg --configure -a || true
-    sudo apt-get install -f -y || true
-}
-
-# --------------------------------------------------
-# 0. System Update
-# --------------------------------------------------
-apt_wait_for_locks
-sudo apt-get update -y
-sudo apt-get upgrade -y || true
+sudo apt update
+sudo apt install -y --no-install-recommends \
+    git curl wget unzip jq fzf ripgrep neovim \
+    zsh zoxide fonts-jetbrains-mono \
+    python3 python3-pip build-essential cmake meson ninja-build pkg-config \
+    libwayland-dev wayland-protocols libxkbcommon-dev libudev-dev libseat-dev \
+    libdrm-dev libgbm-dev libinput-dev libvulkan-dev vulkan-tools \
+    libxcb1-dev libxcb-dri3-dev libxcb-present-dev libxcb-xfixes0-dev \
+    libxcb-render0-dev libxcb-shape0-dev libxcb-xkb-dev xwayland \
+    libxkbcommon-x11-dev libegl1-mesa-dev libgles2-mesa-dev libglu1-mesa-dev \
+    pipewire wireplumber libspa-0.2-bluetooth libpam0g-dev \
+    libdisplay-info-dev libliftoff-dev libinput-bin \
+    swaybg waybar wofi mako swww grim slurp jq
 
 # ==================================================
-# 🧠 DETECT SERVER OR DESKTOP MODE
+# 🧱 BUILD HYPRLAND FROM SOURCE
 # ==================================================
-if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
-    IS_SERVER=true
-    log "💻 Detected headless Ubuntu Server environment (no GUI)."
-else
-    IS_SERVER=false
-    log "🖥️ Detected desktop environment with GUI support."
+log "🔨 Building Hyprland from source..."
+
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
+
+if [ ! -d "Hyprland" ]; then
+    git clone --recursive https://github.com/hyprwm/Hyprland.git
 fi
 
-# ==================================================
-# 🪄 ADD HYPRLAND REPOSITORY (IF NEEDED)
-# ==================================================
-if ! grep -q "hyprland/ppa" /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
-    log "🌿 Adding Hyprland PPA..."
-    sudo apt-get install -y software-properties-common
-    sudo add-apt-repository ppa:hyprland/ppa -y
-    sudo apt-get update -y
-fi
+cd Hyprland
+make all -j$(nproc)
+sudo make install
 
 # ==================================================
-# 🔧 CORE PACKAGES
+# ✨ SHELL + PROMPT
 # ==================================================
-CORE_PKGS=(
-    git curl wget unzip jq fzf ripgrep
-    zsh zoxide neovim python3-pip
-    golang rustc cargo
-    fonts-jetbrains-mono
-    build-essential meson cmake pkg-config
-)
+log "🧠 Configuring Zsh + Starship + Zoxide..."
 
-# Include GUI stack only if not headless
-if [ "$IS_SERVER" = false ]; then
-    CORE_PKGS+=(waybar wofi mako hyprland swww)
-else
-    log "⚙️ Skipping GUI packages (headless mode)."
-fi
-
-# ==================================================
-# 🧰 INSTALL CORE PACKAGES
-# ==================================================
-log "📦 Installing core packages..."
-attempts=0
-max_attempts=3
-
-until [ $attempts -ge $max_attempts ]; do
-    if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${CORE_PKGS[@]}"; then
-        ok "✅ Core packages installed successfully."
-        break
-    fi
-    attempts=$((attempts + 1))
-    err "⚠️ apt-get install failed — retrying ($attempts/$max_attempts)..."
-    apt_recover
-    sleep $((attempts * 5))
-done
-
-if [ $attempts -ge $max_attempts ]; then
-    err "❌ Failed to install core packages after $max_attempts attempts. Check $LOG_FILE."
-    exit 1
-fi
-
-# ==================================================
-# 💫 INSTALL STARSHIP PROMPT
-# ==================================================
 if ! command -v starship &>/dev/null; then
-    log "✨ Installing Starship prompt..."
     curl -fsSL https://starship.rs/install.sh | bash -s -- -y
 fi
-
-# ==================================================
-# 📦 INSTALL GNU STOW
-# ==================================================
-if ! command -v stow &>/dev/null; then
-    log "📦 Installing GNU Stow..."
-    sudo apt install -y stow
-fi
-
-# ==================================================
-# 🧠 CONFIGURE ZSH + STARSHIP + ZOXIDE
-# ==================================================
-log "⚙️ Configuring Zsh..."
-touch "$ZSHRC"
-grep -qxF 'eval "$(starship init zsh)"' "$ZSHRC" || echo 'eval "$(starship init zsh)"' >> "$ZSHRC"
-grep -qxF 'eval "$(zoxide init zsh)"' "$ZSHRC" || echo 'eval "$(zoxide init zsh)"' >> "$ZSHRC"
-grep -qxF 'source ~/.config/zsh/aliases.zsh' "$ZSHRC" || echo 'source ~/.config/zsh/aliases.zsh' >> "$ZSHRC"
 
 if [ "$SHELL" != "$(which zsh)" ]; then
     chsh -s "$(which zsh)"
 fi
 
+ZSHRC="$HOME/.zshrc"
+touch "$ZSHRC"
+
+grep -qxF 'eval "$(starship init zsh)"' "$ZSHRC" || echo 'eval "$(starship init zsh)"' >> "$ZSHRC"
+grep -qxF 'eval "$(zoxide init zsh)"' "$ZSHRC" || echo 'eval "$(zoxide init zsh)"' >> "$ZSHRC"
+grep -qxF 'source ~/.config/zsh/aliases.zsh' "$ZSHRC" || echo 'source ~/.config/zsh/aliases.zsh' >> "$ZSHRC"
+
 # ==================================================
-# 🧱 APPLY CONFIGS
+# 🧩 APPLY CONFIGS
 # ==================================================
-log "🧩 Linking configs using GNU Stow..."
+log "📂 Applying configuration files..."
 mkdir -p "$CONFIG_DIR"
-cd "$REPO_DIR/configs"
-
-for folder in *; do
-    if [ -d "$folder" ]; then
-        log "📂 Linking $folder → ~/.config/$folder"
-        stow -t "$CONFIG_DIR" "$folder" || true
-    fi
-done
+cp -r "$REPO_DIR/configs/"* "$CONFIG_DIR/" || true
 
 # ==================================================
-# 🖼️ WALLPAPER SETUP
+# 🖼️ WALLPAPER
 # ==================================================
-if [ "$IS_SERVER" = false ]; then
-    log "🖼️ Setting wallpaper..."
-    mkdir -p "$HOME/Pictures/wallpapers"
-    cp -r "$WALLPAPER_DIR"/* "$HOME/Pictures/wallpapers/"
-    if command -v swww &>/dev/null; then
-        swww init &>/dev/null || true
-        swww img "$HOME/Pictures/wallpapers/default.jpg" --transition-type any --transition-fps 60 --transition-duration 2 || true
-    fi
-fi
+log "🖼️ Setting up wallpapers..."
+mkdir -p "$HOME/Pictures/wallpapers"
+cp -r "$WALLPAPER_DIR"/* "$HOME/Pictures/wallpapers/" || true
 
 # ==================================================
-# 🔤 FONT CACHE
+# 🎨 FONT CACHE
 # ==================================================
 log "🔤 Updating font cache..."
 fc-cache -fv >/dev/null 2>&1 || true
 
 # ==================================================
+# ⚙️ CREATE START SCRIPT
+# ==================================================
+log "⚙️ Creating Hyprland start helper..."
+
+cat << 'EOF' | sudo tee /usr/local/bin/start-hypr > /dev/null
+#!/usr/bin/env bash
+export XDG_SESSION_TYPE=wayland
+export WLR_NO_HARDWARE_CURSORS=1
+export MOZ_ENABLE_WAYLAND=1
+export QT_QPA_PLATFORM=wayland
+export GDK_BACKEND=wayland
+export XDG_CURRENT_DESKTOP=Hyprland
+
+exec Hyprland
+EOF
+
+sudo chmod +x /usr/local/bin/start-hypr
+
+# ==================================================
 # ✅ DONE
 # ==================================================
 ok "✅ Installation complete!"
-ok "💻 Log out and choose Hyprland session to start (if GUI installed)."
+ok "Run 'start-hypr' from TTY to launch Hyprland."
 ok "📜 Log file: $LOG_FILE"
