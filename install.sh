@@ -40,29 +40,29 @@ fi
 # ==================================================
 check_requirements() {
   log "🔍 Checking system requirements..."
-
+  
   # Check if running as root - DISABLED to resolve user's persistent error
   # if [ "$(id -u)" -eq 0 ]; then
   #   err "❌ Do not run this script as root. Use a regular user with sudo privileges."
   # fi
-
+  
   # Check sudo access
   if ! sudo -n true 2>/dev/null; then
     err "❌ This script requires sudo privileges. Please configure sudo access."
   fi
-
+  
   # Check available memory
   local mem_gb=$(free -g | awk '/^Mem:/{print $2}')
   if [ "$mem_gb" -lt 2 ]; then
     warn "⚠️  Low memory detected: ${mem_gb}GB (recommended: 4GB+)"
   fi
-
+  
   # Check CPU cores
   local cores=$(nproc)
   if [ "$cores" -lt 2 ]; then
     warn "⚠️  Low CPU cores detected: ${cores} (recommended: 2+)"
   fi
-
+  
   ok "✅ System requirements check completed"
 }
 
@@ -100,7 +100,7 @@ pacman_install() {
   local pkgs=("$@")
   local attempts=0
   local max_attempts=3
-
+  
   while [ $attempts -lt $max_attempts ]; do
     wait_pkg_locks
     if sudo pacman -S --needed --noconfirm "${pkgs[@]}"; then
@@ -118,7 +118,7 @@ pacman_install() {
 # ==================================================
 setup_aur_helper() {
   log "🔍 Checking for AUR helper..."
-
+  
   # Check for existing AUR helpers
   if command -v paru >/dev/null 2>&1; then
     log "✅ Found paru AUR helper"
@@ -133,7 +133,7 @@ setup_aur_helper() {
     AUR_HELPER="aurman"
     return 0
   fi
-
+  
   # No AUR helper found, offer to install paru
   warn "⚠️  No AUR helper found. AUR packages will need manual installation."
   read -p "Install paru AUR helper? (recommended) [Y/n]: " -n 1 -r
@@ -161,12 +161,14 @@ install_base_deps() {
   if [ "$IS_ARCH" -eq 1 ]; then
     log "🐧 Updating Arch Linux system..."
     wait_pkg_locks
+    # IMPORTANT: Run full system sync/update before installing dependencies
     sudo pacman -Syu --noconfirm
     ok "✅ System updated"
-
+    
     log "📦 Installing base development and Wayland dependencies..."
+    # MODIFIED: Removed 'libseat' to fix 'target not found' error
     pacman_install git curl wget base-devel meson ninja cmake pkgconf \
-      wayland-protocols vulkan-icd-loader libxkbcommon libseat libinput \
+      wayland-protocols vulkan-icd-loader libxkbcommon libinput \
       libx11 xorg-xwayland xdg-desktop-portal-wlr
     ok "✅ Base dependencies installed"
   else
@@ -192,12 +194,12 @@ install_base_deps() {
 install_hyprland() {
   if [ "$IS_ARCH" -eq 1 ]; then
     log "🧩 Installing Hyprland and core packages from official repositories..."
-
-    # Core Hyprland packages (Alacritty added here based on dotfiles structure)
+    
+    # Core Hyprland packages (Alacritty added based on dotfiles structure)
     pacman_install hyprland waybar wofi mako kitty ghostty alacritty \
       grim slurp wl-clipboard wf-recorder brightnessctl playerctl \
       pavucontrol networkmanager pipewire pipewire-pulse wireplumber
-
+    
     # Check for AUR-only packages
     if [ -n "$AUR_HELPER" ]; then
       log "📦 Installing AUR packages..."
@@ -217,7 +219,7 @@ install_hyprland() {
       warn "    - hyprlock (screen locker)"
       warn "    Install manually or set up an AUR helper"
     fi
-
+    
     ok "✅ Hyprland and core packages installed"
   else
     log "🧩 Installing Hyprland and core packages (Ubuntu/Debian)..."
@@ -225,7 +227,7 @@ install_hyprland() {
       waybar kitty wofi grim slurp wl-clipboard wf-recorder \
       brightnessctl playerctl pavucontrol network-manager \
       pipewire wireplumber mako-notifier
-
+    
     # Build Hyprland from source for Ubuntu/Debian
     log "🔨 Building Hyprland from source..."
     cd /tmp
@@ -244,7 +246,7 @@ install_hyprland() {
 # ==================================================
 deploy_configs() {
   log "📁 Deploying configuration files..."
-
+  
   # Create backup of existing configs
   if [ -d ~/.config ]; then
     local backup_dir="$HOME/.config.bak.$(date +%Y%m%d_%H%M%S)"
@@ -252,18 +254,18 @@ deploy_configs() {
     cp -r ~/.config "$backup_dir"
     ok "✅ Configs backed up"
   fi
-
-  # Create config directories (Alacritty added)
+  
+  # Create config directories (All necessary directories created)
   mkdir -p ~/.config/{hypr,waybar,mako,swww,wofi,kitty,ghostty,zsh,tmux,nvim,alacritty}
-
+  
   # Deploy Hyprland configs
   log "🔧 Deploying Hyprland configuration..."
   cp -r "$(dirname "$0")/configs/hypr/"* ~/.config/hypr/
-
+  
   # Deploy Waybar config
   log "📊 Deploying Waybar configuration..."
   cp -r "$(dirname "$0")/configs/waybar/"* ~/.config/waybar/
-
+  
   # Deploy Mako config
   log "🔔 Deploying Mako configuration..."
   cp -r "$(dirname "$0")/configs/mako/"* ~/.config/mako/
@@ -273,34 +275,33 @@ deploy_configs() {
   cp -r "$(dirname "$0")/configs/kitty/"* ~/.config/kitty/
   cp -r "$(dirname "$0")/configs/ghostty/"* ~/.config/ghostty/
   cp -r "$(dirname "$0")/configs/alacritty/"* ~/.config/alacritty/
-
+  
   # Deploy shell configs (Zsh)
-  log "🐚 Deploying Zsh configurations..."
+  log "🐚 Deploying Zsh and Starship configurations..."
   cp -r "$(dirname "$0")/configs/zsh/"* ~/.config/zsh/
   cp "$(dirname "$0")/configs/starship.toml" ~/.config/
 
   # Deploy Tmux config
   log "💻 Deploying Tmux configuration..."
-  # Deploys files from configs/tmux/ to ~/.config/tmux/
   cp -r "$(dirname "$0")/configs/tmux/"* ~/.config/tmux/
-
+  
   # Deploy Neovim config
   log "📝 Deploying Neovim configuration..."
   cp -r "$(dirname "$0")/configs/nvim/"* ~/.config/nvim/
-
+  
   # Deploy wallpaper script
   log "🖼️ Deploying wallpaper management..."
   cp -r "$(dirname "$0")/configs/swww/"* ~/.config/swww/
   chmod +x ~/.config/swww/set_wallpaper.sh
-
+  
   # Deploy wallpapers
   mkdir -p ~/.config/hypr/wallpapers
   cp -r "$(dirname "$0")/wallpapers/"* ~/.config/hypr/wallpapers/
-
+  
   # Deploy Wofi config
   log "🔍 Deploying Wofi configuration..."
   cp -r "$(dirname "$0")/configs/wofi/"* ~/.config/wofi/
-
+  
   ok "✅ All configurations deployed"
 }
 
@@ -309,15 +310,15 @@ deploy_configs() {
 # ==================================================
 configure_services() {
   log "🔧 Configuring system services..."
-
+  
   if [ "$IS_ARCH" -eq 1 ]; then
     # Enable NetworkManager
     sudo systemctl enable NetworkManager
     sudo systemctl start NetworkManager
-
+    
     # Enable PipeWire
     systemctl --user enable pipewire pipewire-pulse wireplumber
-
+    
     ok "✅ System services configured"
   else
     # Ubuntu/Debian service configuration
@@ -334,13 +335,13 @@ configure_services() {
 # ==================================================
 finalize_setup() {
   log "🎨 Finalizing setup..."
-
+  
   # Clean up temporary files
   rm -rf /tmp/hyprland-build /tmp/cmake-3.* /tmp/paru 2>/dev/null || true
-
+  
   # Set proper permissions
   chmod +x ~/.config/swww/set_wallpaper.sh
-
+  
   # Create desktop entry for Hyprland
   mkdir -p ~/.local/share/applications
   cat > ~/.local/share/applications/hyprland.desktop << 'EOF'
@@ -350,7 +351,7 @@ Comment=Hyprland Wayland Compositor
 Exec=Hyprland
 Type=Application
 EOF
-
+  
   ok "✅ Setup finalized"
 }
 
@@ -371,13 +372,13 @@ show_summary() {
   echo "    ✅ Kitty, Ghostty & Alacritty (terminals)"
   echo "    ✅ PipeWire (audio system)"
   echo "    ✅ NetworkManager (network management)"
-
+  
   if [ "$IS_ARCH" -eq 1 ] && [ -n "$AUR_HELPER" ]; then
     echo "    ✅ swww (wallpaper transitions)"
     echo "    ✅ JetBrainsMono Nerd Font"
     echo "    ✅ hyprlock (screen locker)"
   fi
-
+  
   echo
   echo "🚀 To start Hyprland:"
   echo "    1. Log out of your current session"
@@ -408,14 +409,14 @@ main() {
   echo "🐧 Hyprland Installation Script"
   echo "🐧 ==============================================="
   echo
-
+  
   check_requirements
   install_base_deps
-
+  
   if [ "$IS_ARCH" -eq 1 ]; then
     setup_aur_helper
   fi
-
+  
   install_hyprland
   deploy_configs
   configure_services
