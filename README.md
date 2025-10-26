@@ -1,6 +1,13 @@
 # 🌿 auto-lihypr
 
-A fully automated Hyprland setup script for Ubuntu Server with a focus on development environment and user experience.
+A fully automated Hyprland setup script for Ubuntu and Arch Linux focused on a minimal, developer-friendly Wayland environment.
+
+Supports automatic installation on:
+- Ubuntu / Debian-based systems (apt)
+- Arch Linux (pacman) — installs pacman packages where available and falls back to building from source when necessary
+
+Notes:
+- Some utilities (for example `swww` for fancy wallpaper transitions) may only be available from the AUR on Arch. The installer will warn you and suggest how to install them.
 
 ## ✨ Features
 
@@ -28,16 +35,18 @@ cd auto-lihypr
 # Make the script executable
 chmod +x install.sh
 
-# Run the installation
+# Run the installation (use a persistent session such as tmux on remote hosts)
 ./install.sh
 ```
 
 ## 📋 Requirements
 
-- Ubuntu Server 24.04 LTS
+- Ubuntu Server 24.04 LTS (or other Debian/Ubuntu derivatives) OR Arch Linux
 - Minimum 2 CPU cores
 - Minimum 4GB RAM
-- Sudo privileges
+- Sudo privileges (the script uses sudo for package installation)
+
+If you run on Arch Linux, the script uses `pacman` and will attempt to install available packages from the official repositories. Some packages (AUR-only) will be detected and a manual installation hint will be printed.
 
 ## 🎨 Customization
 
@@ -82,10 +91,15 @@ To set a specific wallpaper:
 
 ## 📝 Logging
 
-Installation logs are saved to:
+Installation logs are written to the home directory. Possible locations used by the installer:
+
 ```bash
+# Check either of these (one may exist depending on script version):
 ~/hyprland_install.log
+~/auto-lihypr_install.log
 ```
+
+If you see an error during installation, attach the most recent log file when asking for help.
 
 ## 🔄 Backup
 
@@ -117,6 +131,36 @@ Your existing configurations are automatically backed up to:
    ```
 
 ### Network Issues
+### Package manager / dpkg / pacman issues
+
+If you see an error like "dpkg was interrupted" or the installer fails because of a broken package state, run the following (Debian/Ubuntu):
+
+```bash
+sudo dpkg --configure -a
+sudo apt-get install -f -y
+sudo apt-get update
+```
+
+On Arch if pacman reports a lock or interrupted transaction:
+
+```bash
+# If a lock file exists and no package manager is running, remove the lock (use with caution):
+sudo rm -f /var/lib/pacman/db.lck
+
+# If a transaction needs finishing, try:
+sudo pacman -Syu --noconfirm
+```
+
+If the installer suggests installing an AUR-only package (for example `swww`), you can install it with an AUR helper such as `paru` or `yay`:
+
+```bash
+paru -S swww
+# or
+yay -S swww
+```
+
+If you prefer automation and want the installer to build specific AUR packages automatically, open an issue or request and I can add a safe `makepkg` path for those packages.
+
 1. Check NetworkManager status:
    ```bash
    systemctl status NetworkManager
@@ -132,4 +176,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](License) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
