@@ -1,10 +1,20 @@
 # 🌿 auto-lihypr
 
-A fully automated Hyprland setup script for Ubuntu and Arch Linux focused on a minimal, developer-friendly Wayland environment.
+A fully automated Hyprland setup script **optimized for Arch Linux** with Ubuntu/Debian support. This configuration is designed for a minimal, developer-friendly Wayland environment with maximum stability on Arch Linux.
 
-Supports automatic installation on:
-- Ubuntu / Debian-based systems (apt)
-- Arch Linux (pacman) — installs pacman packages where available and falls back to building from source when necessary
+## 🎯 **Primary Target: Arch Linux**
+
+**This configuration is primarily designed and tested for Arch Linux.** All configurations are optimized for Arch Linux's rolling release model and package management system.
+
+### Supported Systems:
+- **Arch Linux (pacman)** — ✅ **Primary target, fully optimized**
+- Ubuntu / Debian-based systems (apt) — ⚠️ Secondary support
+
+### Arch Linux Advantages:
+- Latest stable versions of all Wayland components
+- Native package availability for all core dependencies
+- Optimized systemd integration
+- Rolling release ensures compatibility with latest features
 
 Notes:
 - Some utilities (for example `swww` for fancy wallpaper transitions) may only be available from the AUR on Arch. The installer will warn you and suggest how to install them.
@@ -41,12 +51,21 @@ chmod +x install.sh
 
 ## 📋 Requirements
 
-- Ubuntu Server 24.04 LTS (or other Debian/Ubuntu derivatives) OR Arch Linux
+### **Recommended: Arch Linux**
+- **Arch Linux** (latest rolling release) — ✅ **Recommended for best experience**
 - Minimum 2 CPU cores
 - Minimum 4GB RAM
 - Sudo privileges (the script uses sudo for package installation)
+- AUR helper (optional but recommended): `paru`, `yay`, or `pacman` with manual AUR builds
 
-If you run on Arch Linux, the script uses `pacman` and will attempt to install available packages from the official repositories. Some packages (AUR-only) will be detected and a manual installation hint will be printed.
+### **Secondary Support: Ubuntu/Debian**
+- Ubuntu Server 24.04 LTS (or other Debian/Ubuntu derivatives)
+- Minimum 2 CPU cores  
+- Minimum 4GB RAM
+- Sudo privileges
+
+### **Arch Linux Package Management**
+The script uses `pacman` for official packages and provides guidance for AUR packages. All core dependencies are available in official Arch repositories for maximum stability.
 
 ## 🎨 Customization
 
@@ -133,15 +152,9 @@ Your existing configurations are automatically backed up to:
 ### Network Issues
 ### Package manager / dpkg / pacman issues
 
-If you see an error like "dpkg was interrupted" or the installer fails because of a broken package state, run the following (Debian/Ubuntu):
+### **Arch Linux Package Issues**
 
-```bash
-sudo dpkg --configure -a
-sudo apt-get install -f -y
-sudo apt-get update
-```
-
-On Arch if pacman reports a lock or interrupted transaction:
+If pacman reports a lock or interrupted transaction:
 
 ```bash
 # If a lock file exists and no package manager is running, remove the lock (use with caution):
@@ -151,15 +164,37 @@ sudo rm -f /var/lib/pacman/db.lck
 sudo pacman -Syu --noconfirm
 ```
 
-If the installer suggests installing an AUR-only package (for example `swww`), you can install it with an AUR helper such as `paru` or `yay`:
+**Installing AUR Packages** (recommended for full functionality):
+
+If the installer suggests installing an AUR-only package (for example `swww`), install it with an AUR helper:
 
 ```bash
+# Using paru (recommended)
 paru -S swww
-# or
+
+# Using yay
 yay -S swww
+
+# Manual AUR installation
+git clone https://aur.archlinux.org/swww.git
+cd swww
+makepkg -si
 ```
 
-If you prefer automation and want the installer to build specific AUR packages automatically, open an issue or request and I can add a safe `makepkg` path for those packages.
+**Essential AUR packages for full functionality:**
+- `swww` - Wallpaper transitions
+- `ttf-jetbrains-mono-nerd` - Nerd Font for terminals
+- `hyprlock` - Screen locker (if not in official repos)
+
+### **Ubuntu/Debian Package Issues**
+
+If you see an error like "dpkg was interrupted" or the installer fails because of a broken package state:
+
+```bash
+sudo dpkg --configure -a
+sudo apt-get install -f -y
+sudo apt-get update
+```
 
 1. Check NetworkManager status:
    ```bash
