@@ -22,9 +22,16 @@ else
   warn "Not running on Arch Linux: ${PRETTY_NAME:-$ID}"
 fi
 
+# Check ~/.config permissions
+log "Checking ~/.config permissions..."
+if [ -d ~/.config ] && [ -w ~/.config ]; then
+  ok "~/.config exists and is writable"
+else
+  warn "~/.config missing or not writable"
+fi
+
 # Check package availability
 log "Checking package availability..."
-
 packages=(
   "hyprland:community/hyprland"
   "waybar:community/waybar"
@@ -33,12 +40,17 @@ packages=(
   "mako:community/mako"
   "pipewire:extra/pipewire"
   "networkmanager:extra/networkmanager"
+  "xcursorgen:extra/xcursorgen"
+  "alacritty:community/alacritty"
+  "ghostty:community/ghostty"
+  "tmux:extra/tmux"
+  "neovim:extra/neovim"
+  "zsh:extra/zsh"
 )
 
 for pkg_info in "${packages[@]}"; do
   pkg_name="${pkg_info%%:*}"
   pkg_repo="${pkg_info##*:}"
-  
   if pacman -Si "$pkg_name" >/dev/null 2>&1; then
     ok "Package $pkg_name available in $pkg_repo"
   else
@@ -48,10 +60,10 @@ done
 
 # Check AUR packages
 log "Checking AUR package availability..."
-aur_packages=("swww" "ttf-jetbrains-mono-nerd" "hyprlock")
-
+aur_packages=("swww" "ttf-jetbrains-mono-nerd" "zoxide-bin" "starship" "hyprlock")
+aur_info=$(curl -s "https://aur.archlinux.org/rpc/?v=5&type=info&arg[]=${aur_packages[*]}")
 for pkg in "${aur_packages[@]}"; do
-  if curl -s "https://aur.archlinux.org/rpc/?v=5&type=info&arg[]=$pkg" | grep -q '"Name":"'"$pkg"'"'; then
+  if echo "$aur_info" | grep -q '"Name":"'"$pkg"'"'; then
     ok "AUR package $pkg available"
   else
     warn "AUR package $pkg not found or AUR unavailable"
@@ -60,18 +72,24 @@ done
 
 # Check configuration files
 log "Checking configuration files..."
-
 config_files=(
-  "configs/hypr/hyprland.conf"
-  "configs/hypr/keybinds.conf"
-  "configs/hypr/decorations.conf"
-  "configs/hypr/monitors.conf"
-  "configs/waybar/config.jsonc"
-  "configs/mako/config"
-  "configs/kitty/kitty.conf"
-  "configs/ghostty/config"
-  "configs/starship.toml"
-  "configs/swww/set_wallpaper.sh"
+  "configs/wm/hypr/hyprland.conf"
+  "configs/wm/hypr/keybinds.conf"
+  "configs/wm/hypr/decorations.conf"
+  "configs/wm/hypr/monitors.conf"
+  "configs/wm/hypr/cursor.conf"
+  "configs/wm/waybar/config.jsonc"
+  "configs/wm/mako/config"
+  "configs/wm/swww/set_wallpaper.sh"
+  "configs/dotfiles/kitty/kitty.conf"
+  "configs/dotfiles/alacritty/alacritty.toml"
+  "configs/dotfiles/ghostty/config"
+  "configs/dotfiles/tmux/tmux.conf"
+  "configs/dotfiles/nvim/init.lua"
+  "configs/dotfiles/zsh/starship.toml"
+  "configs/dotfiles/zsh/aliases.zsh"
+  "themes/professional/colors.json"
+  "themes/professional/fonts.conf"
 )
 
 for file in "${config_files[@]}"; do
@@ -82,26 +100,35 @@ for file in "${config_files[@]}"; do
   fi
 done
 
+# Check custom cursor (optional)
+log "Checking custom cursor..."
+if [ -f "configs/wm/hypr/banana.png" ]; then
+  ok "Custom cursor image exists: configs/wm/hypr/banana.png"
+else
+  warn "Custom cursor image missing: configs/wm/hypr/banana.png"
+fi
+
 # Check script permissions
 log "Checking script permissions..."
-if [ -x "install.sh" ]; then
-  ok "install.sh is executable"
-else
-  warn "install.sh is not executable"
-fi
+scripts=("hyprland.sh" "dotfiles.sh")
+for script in "${scripts[@]}"; do
+  if [ -x "scripts/$script" ]; then
+    ok "$script is executable"
+  else
+    warn "$script is not executable"
+  fi
+done
 
 # Check for AUR helpers
 log "Checking for AUR helpers..."
 aur_helpers=("paru" "yay" "aurman")
 found_helper=false
-
 for helper in "${aur_helpers[@]}"; do
   if command -v "$helper" >/dev/null 2>&1; then
     ok "AUR helper found: $helper"
     found_helper=true
   fi
 done
-
 if [ "$found_helper" = false ]; then
   warn "No AUR helper found (paru, yay, or aurman)"
 fi
